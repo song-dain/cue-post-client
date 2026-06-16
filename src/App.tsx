@@ -31,7 +31,7 @@ function App() {
   }, [selectedCategory, selectedTag])
 
   useEffect(() => {
-    fetch('http://localhost:5001/api/cards')
+    fetch('https://cue-post-server.onrender.com/api/cards')
     .then((res) => res.json())
     .then((data) => {
       setCards(data)
