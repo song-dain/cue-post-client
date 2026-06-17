@@ -3,18 +3,47 @@ import type { CardItem } from '../data/cards'
 
 type CardModalProps = {
   card: CardItem | null
-  language: 'ko' | 'en' // 👈 부모(App.tsx)로부터 언어 상태 수신
+  language: 'ko' | 'en'
   onClose: () => void
 }
 
 export function CardModal({ card, language, onClose }: CardModalProps) {
   const [copied, setCopied] = useState(false)
-  const [userInput, setUserInput] = useState('')
+  const [dynamicPrompt, setDynamicPrompt] = useState<{ ko: string | null; en: string | null }>({
+    ko: null,
+    en: null
+  })
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (!card) return
     setCopied(false)
-    setUserInput('')
+    
+    setDynamicPrompt({
+      ko: card.prompt_ko,
+      en: card.prompt_en
+    })
+
+    if (!card.prompt_ko || !card.prompt_en) {
+      setLoading(true)
+      fetch(`http://localhost:5001/api/cards/${card.id}/prompt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          setDynamicPrompt({
+            ko: data.prompt_ko,
+            en: data.prompt_en
+          })
+        })
+        .catch((err) => {
+          console.error(err)
+        })
+        .finally(() => {
+          setLoading(false)
+        })
+    }
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -29,14 +58,7 @@ export function CardModal({ card, language, onClose }: CardModalProps) {
 
   if (!card) return null
 
-  // 🌐 1. 현재 언어 상태에 맞는 프롬프트 원문 선택
-  // 만약 백엔드에서 프롬프트를 아직 안 긁어와서 null이면 영어 설명이나 기본 텍스트로 폴백(Fallback) 처리
-  const currentPrompt = (language === 'ko' ? card.prompt_ko : card.prompt_en) || card.summary_en
-
-  // 🎯 2. 대괄호 변수([...])를 유저 입력값으로 실시간 치환
-  const resolvedPrompt = userInput.trim()
-    ? currentPrompt.replace(/\[[^\]]+\]/g, userInput.trim())
-    : currentPrompt
+  const resolvedPrompt = (language === 'ko' ? dynamicPrompt.ko : dynamicPrompt.en) || card.summary_en
 
   const handleCopy = async () => {
     try {
@@ -77,7 +99,6 @@ export function CardModal({ card, language, onClose }: CardModalProps) {
           </svg>
         </button>
 
-        {/* 🌐 3. 카테고리 ID를 다국어 라벨로 매핑해서 노출해도 좋고, 직무 ID 그대로 노출해도 좋습니다. */}
         <span className="inline-block rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600 uppercase tracking-wider">
           {card.category}
         </span>
@@ -86,12 +107,10 @@ export function CardModal({ card, language, onClose }: CardModalProps) {
           {card.title}
         </h2>
         
-        {/* 🌐 4. 언어별 설명 스위칭 */}
         <p className="mt-3 text-gray-600 leading-relaxed">
           {language === 'ko' ? card.summary_ko : card.summary_en}
         </p>
 
-        {/* 🌐 5. 언어별 태그 스위칭 */}
         <div className="mt-4 flex flex-wrap gap-2">
           {(language === 'ko' ? card.tags_ko : card.tags_en).map((tag) => (
             <span
@@ -103,47 +122,38 @@ export function CardModal({ card, language, onClose }: CardModalProps) {
           ))}
         </div>
 
-        {/* 사용자 입력 textarea */}
-        <div className="mt-5">
-          <label
-            htmlFor="user-input"
-            className="block text-xs font-medium text-gray-500 mb-1.5"
-          >
-            {language === 'ko' ? '내용 입력' : 'Input Content'}
-          </label>
-          <textarea
-            id="user-input"
-            value={userInput}
-            onChange={(e) => setUserInput(e.target.value)}
-            placeholder={
-              language === 'ko' 
-                ? '여기에 검토할 내용이나 키워드를 입력하세요' 
-                : 'Enter context or keywords to customize the prompt'
-            }
-            rows={5}
-            className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-800 placeholder-gray-400 leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
-          />
-        </div>
+        <div className="mt-6 rounded-xl bg-gray-50 border border-gray-100 p-4 min-h-[120px] flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-gray-500">
+                {language === 'ko' ? '마스터 프롬프트' : 'Master Prompt'}
+              </p>
+              {!loading && (
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-700"
+                >
+                  {copied 
+                    ? (language === 'ko' ? '복사됨!' : 'Copied!') 
+                    : (language === 'ko' ? '복사하기' : 'Copy')}
+                </button>
+              )}
+            </div>
 
-        {/* 프롬프트 미리보기 */}
-        <div className="mt-3 rounded-xl bg-gray-50 border border-gray-100 p-4">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-medium text-gray-500">
-              {language === 'ko' ? '완성된 프롬프트' : 'Generated Prompt'}
-            </p>
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-700"
-            >
-              {copied 
-                ? (language === 'ko' ? '복사됨!' : 'Copied!') 
-                : (language === 'ko' ? '복사하기' : 'Copy')}
-            </button>
+            {loading ? (
+              <div className="flex flex-col items-center justify-center pt-6 gap-2">
+                <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                <p className="text-xs text-gray-400">
+                  {language === 'ko' ? 'AI가 프롬프트 기획하는 중...' : 'AI is structuring your prompt...'}
+                </p>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                {resolvedPrompt}
+              </p>
+            )}
           </div>
-          <p className="mt-2 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-            {resolvedPrompt}
-          </p>
         </div>
 
         <button
