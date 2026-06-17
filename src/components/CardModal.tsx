@@ -3,10 +3,11 @@ import type { CardItem } from '../data/cards'
 
 type CardModalProps = {
   card: CardItem | null
+  language: 'ko' | 'en' // 👈 부모(App.tsx)로부터 언어 상태 수신
   onClose: () => void
 }
 
-export function CardModal({ card, onClose }: CardModalProps) {
+export function CardModal({ card, language, onClose }: CardModalProps) {
   const [copied, setCopied] = useState(false)
   const [userInput, setUserInput] = useState('')
 
@@ -28,10 +29,14 @@ export function CardModal({ card, onClose }: CardModalProps) {
 
   if (!card) return null
 
-  // 대괄호 변수([...])를 유저 입력값으로 실시간 치환
+  // 🌐 1. 현재 언어 상태에 맞는 프롬프트 원문 선택
+  // 만약 백엔드에서 프롬프트를 아직 안 긁어와서 null이면 영어 설명이나 기본 텍스트로 폴백(Fallback) 처리
+  const currentPrompt = (language === 'ko' ? card.prompt_ko : card.prompt_en) || card.summary_en
+
+  // 🎯 2. 대괄호 변수([...])를 유저 입력값으로 실시간 치환
   const resolvedPrompt = userInput.trim()
-    ? card.prompt.replace(/\[[^\]]+\]/g, userInput.trim())
-    : card.prompt
+    ? currentPrompt.replace(/\[[^\]]+\]/g, userInput.trim())
+    : currentPrompt
 
   const handleCopy = async () => {
     try {
@@ -53,7 +58,7 @@ export function CardModal({ card, onClose }: CardModalProps) {
       <button
         type="button"
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        aria-label="닫기"
+        aria-label={language === 'ko' ? '닫기' : 'Close'}
         onClick={onClose}
       />
       <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
@@ -61,7 +66,7 @@ export function CardModal({ card, onClose }: CardModalProps) {
           type="button"
           onClick={onClose}
           className="absolute top-4 right-4 rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-          aria-label="닫기"
+          aria-label={language === 'ko' ? '닫기' : 'Close'}
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
             <path
@@ -72,16 +77,23 @@ export function CardModal({ card, onClose }: CardModalProps) {
           </svg>
         </button>
 
-        <span className="inline-block rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
+        {/* 🌐 3. 카테고리 ID를 다국어 라벨로 매핑해서 노출해도 좋고, 직무 ID 그대로 노출해도 좋습니다. */}
+        <span className="inline-block rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600 uppercase tracking-wider">
           {card.category}
         </span>
+        
         <h2 id="modal-title" className="mt-2 pr-8 text-xl font-semibold text-gray-900">
           {card.title}
         </h2>
-        <p className="mt-3 text-gray-600 leading-relaxed">{card.summary}</p>
+        
+        {/* 🌐 4. 언어별 설명 스위칭 */}
+        <p className="mt-3 text-gray-600 leading-relaxed">
+          {language === 'ko' ? card.summary_ko : card.summary_en}
+        </p>
 
+        {/* 🌐 5. 언어별 태그 스위칭 */}
         <div className="mt-4 flex flex-wrap gap-2">
-          {card.tags.map((tag) => (
+          {(language === 'ko' ? card.tags_ko : card.tags_en).map((tag) => (
             <span
               key={tag}
               className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700"
@@ -97,13 +109,17 @@ export function CardModal({ card, onClose }: CardModalProps) {
             htmlFor="user-input"
             className="block text-xs font-medium text-gray-500 mb-1.5"
           >
-            내용 입력
+            {language === 'ko' ? '내용 입력' : 'Input Content'}
           </label>
           <textarea
             id="user-input"
             value={userInput}
             onChange={(e) => setUserInput(e.target.value)}
-            placeholder="여기에 검토할 API 명세나 코드를 입력하세요"
+            placeholder={
+              language === 'ko' 
+                ? '여기에 검토할 내용이나 키워드를 입력하세요' 
+                : 'Enter context or keywords to customize the prompt'
+            }
             rows={5}
             className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-800 placeholder-gray-400 leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition"
           />
@@ -112,13 +128,17 @@ export function CardModal({ card, onClose }: CardModalProps) {
         {/* 프롬프트 미리보기 */}
         <div className="mt-3 rounded-xl bg-gray-50 border border-gray-100 p-4">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-xs font-medium text-gray-500">완성된 프롬프트</p>
+            <p className="text-xs font-medium text-gray-500">
+              {language === 'ko' ? '완성된 프롬프트' : 'Generated Prompt'}
+            </p>
             <button
               type="button"
               onClick={handleCopy}
               className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-700"
             >
-              {copied ? '복사됨!' : '복사하기'}
+              {copied 
+                ? (language === 'ko' ? '복사됨!' : 'Copied!') 
+                : (language === 'ko' ? '복사하기' : 'Copy')}
             </button>
           </div>
           <p className="mt-2 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
@@ -131,7 +151,7 @@ export function CardModal({ card, onClose }: CardModalProps) {
           onClick={onClose}
           className="mt-5 w-full rounded-lg border border-gray-200 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
         >
-          닫기
+          {language === 'ko' ? '닫기' : 'Close'}
         </button>
       </div>
     </div>
