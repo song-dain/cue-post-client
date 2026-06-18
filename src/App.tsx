@@ -9,10 +9,7 @@ import {
 } from './data/cards'
 
 function App() {
-  // 🌐 다국어 상태 추가 ('ko' = 한국어, 'en' = 영어)
   const [language, setLanguage] = useState<'ko' | 'en'>('ko')
-  
-  // 🎯 카테고리 초기값을 영어 ID로 변경
   const [selectedCategory, setSelectedCategory] = useState<string>('marketer')
   const [selectedTag, setSelectedTag] = useState<string[]>([])
   const [selectedCard, setSelectedCard] = useState<CardItem | null>(null)
@@ -20,44 +17,52 @@ function App() {
   const [cards, setCards] = useState<CardItem[]>([])
   const [isLoading, setIsLoading] = useState<boolean>(true)
 
-  // 🏷️ 소분류 태그 동적 추출
-  // 현재 카테고리에 속한 카드들이 가진 tags_ko 또는 tags_en 배열을 중복 없이 묶어냅니다.
-  const subTags = useMemo(() => {
-    const targetCards = cards.filter(card => card.category === selectedCategory)
-    const allTags = targetCards.flatMap(card => language === 'ko' ? card.tags_ko : card.tags_en)
-    return Array.from(new Set(allTags))
-  }, [cards, selectedCategory, language])
+  const [page, setPage] = useState<number>(1)
+  const [totalPages, setTotalPages] = useState<number>(1)
+  const limit = 12;
 
-  // 🎯 필터링된 카드 계산 (다국어 스키마 반영)
+  // 로컬 컴퓨터 환경과 클라우드 배포 환경 주소 자동 전환
+  const API_BASE_URL = window.location.hostname === 'localhost' 
+    ? 'http://localhost:5001' 
+    : 'https://cue-post-server.onrender.com';
+
+  const subTags = useMemo(() => {
+    if (!cards) return []
+    const allTags = cards.flatMap(card => language === 'ko' ? card.tags_ko : card.tags_en)
+    return Array.from(new Set(allTags))
+  }, [cards, language])
+
   const filteredCards = useMemo(() => {
+    if (!cards) return []
     return cards.filter((card) => {
-      // 1. 직무 카테고리 매칭 검사 ('marketer', 'developer' 등)
-      if (card.category !== selectedCategory) return false
       if (selectedTag.length === 0) return true
-      
-      // 2. 다국어 상태에 맞는 태그 필터 검사
       const currentCardTags = language === 'ko' ? card.tags_ko : card.tags_en
       return selectedTag.every(tag => currentCardTags.includes(tag))
     })
-  }, [cards, selectedCategory, selectedTag, language])
+  }, [cards, selectedTag, language])
 
-  // 🔄 언어가 바뀔 때 선택되어 있던 소분류 태그 초기화 (한영 태그 글자가 다르므로)
+  // 언어나 카테고리가 바뀌면 탭 필터만 클린하게 대사 처리
   useEffect(() => {
     setSelectedTag([])
+    setPage(1)
   }, [language, selectedCategory])
 
+  // 로컬/운영 분기 주소를 들고 데이터를 호출하는 일원화된 단일 파이프라인
   useEffect(() => {
-    fetch('https://cue-post-server.onrender.com/api/cards')
+    setIsLoading(true)
+    fetch(`${API_BASE_URL}/api/cards?page=${page}&limit=${limit}&category=${selectedCategory}`)
     .then((res) => res.json())
     .then((data) => {
-      setCards(data)
+      setCards(data.cards || [])
+      setTotalPages(data.totalPages || 1)
       setIsLoading(false)
     })
     .catch((err) => {
       console.error('데이터 가져오기 실패:', err)
+      setCards([])
       setIsLoading(false)
     })
-  }, [])
+  }, [page, selectedCategory, API_BASE_URL])
 
   const handleToggleTag = (tag: string) => {
     setSelectedTag((prev) =>
@@ -80,8 +85,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* 🌐 우측 상단 플로팅 다국어 토글 버튼 */}
+    <div className="min-h-screen bg-gray-50 relative">
       <div className="absolute top-4 right-6">
         <button
           onClick={() => setLanguage(prev => prev === 'ko' ? 'en' : 'ko')}
@@ -101,10 +105,8 @@ function App() {
           </p>
         </header>
 
-        {/* 🎛️ 직무 분류 탭 컴포넌트 */}
         <section className="mb-6">
           <CategoryTabs
-            // 언어에 맞게 카테고리 표시 이름 배열을 런타임 가공하여 주입
             categories={JOB_CATEGORIES.map(cat => ({
               id: cat.id,
               label: language === 'ko' ? cat.ko : cat.en
@@ -121,7 +123,7 @@ function App() {
           <TagFilter tags={subTags} selectedTags={selectedTag} onToggle={handleToggleTag} onClear={handleClearTags}/>
         </section>
 
-        <section>
+        <section className="mb-10">
           {filteredCards.length > 0 ? (
             <CardGrid cards={filteredCards} language={language} onCardClick={setSelectedCard} />
           ) : (
@@ -130,6 +132,40 @@ function App() {
             </p>
           )}
         </section>
+
+        <footer className="flex justify-center items-center space-x-1 border-t border-gray-200 pt-6">
+          <button
+            disabled={page === 1}
+            onClick={() => setPage(prev => Math.max(prev - 1, 1))}
+            className="rounded border border-gray-300 bg-white px-3 py-1 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+          >
+            {language === 'ko' ? '이전' : 'Prev'}
+          </button>
+
+          <div className="flex space-x-1">
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+              <button
+                key={pageNum}
+                onClick={() => setPage(pageNum)}
+                className={`rounded px-3 py-1 text-sm font-semibold transition ${
+                  page === pageNum
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                {pageNum}
+              </button>
+            ))}
+          </div>
+
+          <button
+            disabled={page === totalPages}
+            onClick={() => setPage(prev => Math.min(prev + 1, totalPages))}
+            className="rounded border border-gray-300 bg-white px-3 py-1 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+          >
+            {language === 'ko' ? '다음' : 'Next'}
+          </button>
+        </footer>
       </div>
 
       <CardModal card={selectedCard} language={language} onClose={() => setSelectedCard(null)} />
