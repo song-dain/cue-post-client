@@ -23,7 +23,7 @@ function App() {
 
   // 로컬 컴퓨터 환경과 클라우드 배포 환경 주소 자동 전환
   const API_BASE_URL = window.location.hostname === 'localhost' 
-    ? 'http://localhost:5001' 
+    ? 'http://localhost:3000' 
     : 'https://cue-post-server.onrender.com';
 
   const subTags = useMemo(() => {
